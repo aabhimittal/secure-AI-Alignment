@@ -1,0 +1,30 @@
+{
+  "n_harmful": 30,
+  "n_benign": 30,
+  "plain_detection": {
+    "precision": 1.0,
+    "recall": 0.9666666666666667,
+    "f1": 0.983050847457627,
+    "accuracy": 0.9833333333333333,
+    "tp": 29,
+    "fp": 0,
+    "fn": 1,
+    "tn": 30
+  },
+  "evasion_recall_by_transform": {
+    "plain": 0.9667,
+    "base64": 0.9667,
+    "leetspeak": 0.9667,
+    "roleplay": 1.0,
+    "grandma": 0.9667,
+    "zero_width": 0.9667
+  },
+  "recall_by_category": {
+    "weapons_explosives": 1.0,
+    "fraud_illicit": 0.875,
+    "cyber_malware": 1.0,
+    "self_harm_violence": 1.0,
+    "drugs": 1.0,
+    "extremism": 1.0
+  }
+}

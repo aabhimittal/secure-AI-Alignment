@@ -1,0 +1,145 @@
+{
+  "n_cases": 15,
+  "naive_parse_rate": 0.2667,
+  "guarded_conformance_rate": 0.9333,
+  "recovered_by_repair": 10,
+  "details": [
+    {
+      "id": "fmt-001",
+      "kind": "json",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-002",
+      "kind": "json",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-003",
+      "kind": "json",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "single_to_double_quotes",
+        "python_literal"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-004",
+      "kind": "json",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "trailing_comma"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-005",
+      "kind": "json",
+      "valid": false,
+      "repaired": false,
+      "repairs_applied": [
+        "balanced_brackets",
+        "balanced_brackets"
+      ],
+      "error": "Expecting ',' delimiter: line 1 column 34 (char 33)"
+    },
+    {
+      "id": "fmt-006",
+      "kind": "json",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "python_literal"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-007",
+      "kind": "json",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-008",
+      "kind": "json",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-009",
+      "kind": "json",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "trailing_comma"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-010",
+      "kind": "json",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "python_literal",
+        "balanced_brackets"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-011",
+      "kind": "xml",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-012",
+      "kind": "xml",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-013",
+      "kind": "xml",
+      "valid": true,
+      "repaired": true,
+      "repairs_applied": [
+        "escape_ampersand"
+      ],
+      "error": null
+    },
+    {
+      "id": "fmt-014",
+      "kind": "xml",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    },
+    {
+      "id": "fmt-015",
+      "kind": "xml",
+      "valid": true,
+      "repaired": false,
+      "repairs_applied": [],
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "jailbreak": {
+    "plain_f1": 0.9831,
+    "plain_recall": 0.9667,
+    "plain_precision": 1.0,
+    "mean_evasion_recall": 0.9723
+  },
+  "bias": {
+    "specificity_flagged": 0,
+    "sensitivity_detection_rate": 0.7
+  },
+  "format": {
+    "naive_parse_rate": 0.2667,
+    "guarded_conformance_rate": 0.9333
+  }
+}

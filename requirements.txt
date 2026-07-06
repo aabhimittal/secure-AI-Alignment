@@ -1,0 +1,6 @@
+# Core harness is standard-library only. These are for the demo + charts + tests.
+gradio>=5.49,<6        # demo UI (matches the deployed Hugging Face Space)
+jsonschema>=4.0
+matplotlib>=3.7        # charts in scripts/run_eval.py
+huggingface_hub>=0.24  # optional: live toxic-bert bias audit
+pytest>=7.0            # tests only

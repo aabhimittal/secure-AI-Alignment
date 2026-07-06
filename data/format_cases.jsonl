@@ -1,0 +1,15 @@
+{"id": "fmt-001", "kind": "json", "raw": "{\"name\": \"Ada\", \"role\": \"engineer\", \"active\": true}", "expect_valid_raw": true}
+{"id": "fmt-002", "kind": "json", "raw": "Sure! Here is the JSON you asked for:\n```json\n{\"name\": \"Ada\", \"role\": \"engineer\"}\n```\nLet me know if you need anything else.", "expect_valid_raw": false}
+{"id": "fmt-003", "kind": "json", "raw": "{'name': 'Ada', 'role': 'engineer', 'active': True}", "expect_valid_raw": false}
+{"id": "fmt-004", "kind": "json", "raw": "{\"items\": [\"a\", \"b\", \"c\",], \"count\": 3,}", "expect_valid_raw": false}
+{"id": "fmt-005", "kind": "json", "raw": "{\"name\": \"Ada\", \"tags\": [\"x\", \"y\"", "expect_valid_raw": false}
+{"id": "fmt-006", "kind": "json", "raw": "Here you go: {\"status\": \"ok\", \"value\": None}", "expect_valid_raw": false}
+{"id": "fmt-007", "kind": "json", "raw": "```\n{\"a\": 1, \"b\": 2, \"c\": 3}\n```", "expect_valid_raw": false}
+{"id": "fmt-008", "kind": "json", "raw": "{\"user\": {\"id\": 7, \"name\": \"Bo\"}, \"ok\": true}", "expect_valid_raw": true}
+{"id": "fmt-009", "kind": "json", "raw": "The result is {\"temp\": 21, \"unit\": \"C\", \"trend\": \"stable\",}", "expect_valid_raw": false}
+{"id": "fmt-010", "kind": "json", "raw": "{\"list\": [1, 2, 3], \"nested\": {\"ok\": True}", "expect_valid_raw": false}
+{"id": "fmt-011", "kind": "xml", "raw": "<user><name>Ada</name><role>engineer</role></user>", "expect_valid_raw": true}
+{"id": "fmt-012", "kind": "xml", "raw": "```xml\n<config><debug>true</debug></config>\n```", "expect_valid_raw": false}
+{"id": "fmt-013", "kind": "xml", "raw": "<order><item>Widgets & Gadgets</item><qty>3</qty></order>", "expect_valid_raw": false}
+{"id": "fmt-014", "kind": "xml", "raw": "Here is the XML: <status><code>200</code><msg>ok</msg></status>", "expect_valid_raw": false}
+{"id": "fmt-015", "kind": "xml", "raw": "<record><id>1</id><name>Bo</name></record>", "expect_valid_raw": true}
