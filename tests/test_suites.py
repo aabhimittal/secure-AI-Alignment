@@ -10,6 +10,7 @@ from sentinel.jailbreak import JailbreakGuard, TRANSFORMS, to_base64
 from sentinel.bias import BiasProbe, lexicon_sentiment
 from sentinel.formatctl import FormatController
 from sentinel.models import demonstrator_scorer
+from sentinel.nim import NIMSafetyGuard, NIMClient
 
 
 # ----------------------------- jailbreak --------------------------------- #
@@ -114,3 +115,24 @@ def test_repairs_unescaped_ampersand_xml():
     res = fc.process_xml("<item>Widgets & Gadgets</item>")
     assert res.valid
     assert res.repaired
+
+
+# ------------------------------- NIM ------------------------------------- #
+
+def test_nim_parse_unsafe():
+    unsafe, cats = NIMSafetyGuard._parse('{"User Safety": "unsafe", "Safety Categories": "Weapons, Fraud"}')
+    assert unsafe is True
+    assert cats == ["Weapons", "Fraud"]
+
+
+def test_nim_parse_safe():
+    unsafe, cats = NIMSafetyGuard._parse('{"User Safety": "safe"} ')
+    assert unsafe is False
+    assert cats == []
+
+
+def test_nim_client_reports_unavailable_without_key():
+    # No key passed and env unset in test context -> not available.
+    c = NIMClient(api_key=None)
+    if not (c.api_key):  # only assert when the env truly has no key
+        assert c.available is False
