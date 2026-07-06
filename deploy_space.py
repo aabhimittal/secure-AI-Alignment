@@ -28,7 +28,7 @@ emoji: 🛡️
 colorFrom: indigo
 colorTo: red
 sdk: gradio
-sdk_version: 4.44.0
+sdk_version: 5.49.1
 app_file: app.py
 pinned: false
 license: mit
@@ -46,8 +46,12 @@ Interactive demo of three LLM trust-and-safety guardrails:
 Reproducible benchmarks and source: https://github.com/aabhimittal/secure-AI-Alignment
 """
 
+# The Space gets gradio (and huggingface_hub) from the `sdk_version` in the
+# frontmatter, so its requirements only list the one extra runtime dep.
+SPACE_REQUIREMENTS = "jsonschema>=4.0\n"
+
 # Only what the app needs at runtime.
-UPLOAD = ["app.py", "requirements.txt",
+UPLOAD = ["app.py",
           "sentinel/__init__.py", "sentinel/jailbreak.py", "sentinel/bias.py",
           "sentinel/formatctl.py", "sentinel/models.py"]
 
@@ -75,6 +79,11 @@ def main():
 
     # Space README (with the required YAML frontmatter).
     api.upload_file(path_or_fileobj=SPACE_README.encode(), path_in_repo="README.md",
+                    repo_id=repo_id, repo_type="space", token=token)
+
+    # Space-specific requirements (gradio provided via sdk_version).
+    api.upload_file(path_or_fileobj=SPACE_REQUIREMENTS.encode(),
+                    path_in_repo="requirements.txt",
                     repo_id=repo_id, repo_type="space", token=token)
 
     for rel in UPLOAD:
