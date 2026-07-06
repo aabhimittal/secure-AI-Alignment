@@ -15,7 +15,15 @@ Three production trust-and-safety guardrails, in one small, auditable package:
 
 > **Every number above is reproduced offline by `python scripts/run_eval.py`** — pure standard library, no API key, no model download. The results in [`results/`](results/) are committed so they can be diffed and audited.
 
-**🔴 Live demo:** https://huggingface.co/spaces/abhimittal/sentinel-llm
+**🔴 Live interactive demo:** https://huggingface.co/spaces/abhimittal/sentinel-llm
+
+Redeploy your own copy in one command (`python app.py` also runs it locally):
+
+```bash
+pip install huggingface_hub
+huggingface-cli login          # or: export HF_TOKEN=hf_...
+python deploy_space.py         # -> https://huggingface.co/<you>/sentinel-llm
+```
 
 ---
 
