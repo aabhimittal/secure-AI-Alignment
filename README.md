@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![🤗 Space](https://img.shields.io/badge/🤗%20Live%20Demo-Spaces-orange)](https://huggingface.co/spaces/abhimittal/sentinel-llm)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aabhimittal/secure-AI-Alignment/blob/main/notebooks/Nemotron_Diffusion_8B_Colab.ipynb)
 
 Three production trust-and-safety guardrails, in one small, auditable package:
 
@@ -12,6 +13,8 @@ Three production trust-and-safety guardrails, in one small, auditable package:
 | ⛔ **Adversarial / Jailbreak detection** | De-obfuscates and scans prompts before they reach the model | **F1 = 0.98** at **100 % precision** on AdvBench; obfuscation is defeated (**0.97** mean detection under base64 / leetspeak / zero-width / roleplay) |
 | ⚖️ **Bias mitigation** | Counterfactual demographic probing of any scorer/model | **0 false-bias flags** on an identity-blind scorer; **recovers injected bias** and correctly names *Muslim / Middle-Eastern / transgender* as the least-favoured groups |
 | 🧩 **Output-format control** | Extracts, repairs & schema-validates JSON / XML | Structured-output conformance lifted from **27 % → 93 %** on messy model output |
+| 🔎 **AppSec code scanning** | Strix-inspired OWASP Top-10 SAST for Python (AST-based) | **P 1.00 · R 1.00 · F1 1.00** on a labeled vuln/safe corpus (0 false positives); 13 vuln classes, CWE + fix per finding |
+| 🕷️ **DAST / pentest / stress** | Live-app security testing against a running target | **10/10 techniques confirmed** (XSS, SQLi, SSTI, traversal, cmd-i, NoSQLi, OOB-SSRF, XXE, IDOR, auth-bypass) with 0 control false positives; 10 header/config findings; stress ~**150 rps** |
 
 > **Every number above is reproduced offline by `python scripts/run_eval.py`** — pure standard library, no API key, no model download. The results in [`results/`](results/) are committed so they can be diffed and audited.
 
@@ -95,6 +98,56 @@ The harness is validated two ways:
 15 realistic "messy" model outputs (markdown fences, chatty preambles, single quotes, trailing commas, Python `True/None`, unbalanced brackets, unescaped XML `&`). Only **27 %** parse naively; after Sentinel's extract-and-repair, **93 %** are handed to the backend as valid, schema-checked objects — **10 of 15 recovered**.
 
 ![Format conformance](results/charts/format_conformance.png)
+
+### 4 · AppSec code scanner (SAST) — [`results/appsec.json`](results/appsec.json)
+
+Inspired by [Strix](https://github.com/usestrix/strix) (an autonomous AI pentester), this is the **defensive, static** slice: an `ast`-based scanner that flags the same OWASP Top-10 classes Strix probes for — **injection** (SQL / OS-command / code / SSTI), **SSRF**, **XXE**, **insecure deserialization**, **XSS**, **weak crypto**, **disabled TLS verification**, **insecure JWT**, **security misconfig**, and **hardcoded secrets** — each with a CWE id, OWASP category, severity and remediation. AST matching keeps precision high: a *literal* SQL string is safe, an *interpolated* one is not.
+
+On a labeled corpus of 30 snippets (17 vulnerable + 13 safe fixed counterparts):
+
+```
+precision 1.00   recall 1.00   F1 1.00   (0 false positives on the safe set)
+```
+
+![AppSec OWASP findings](results/charts/appsec_owasp.png)
+
+It ships with a Strix-style CLI (`--target`, headless CI gate, git-diff scope):
+
+```bash
+python scripts/scan.py --target ./sentinel                     # scan a path
+python scripts/scan.py --target ./ --diff-base origin/main      # only changed files
+python scripts/scan.py --target ./ --min-severity high --ci     # exit 1 on findings (CI gate)
+python scripts/run_appsec.py                                    # reproduce the benchmark
+```
+
+```python
+from sentinel import AppSecScanner
+for f in AppSecScanner().scan("import os; os.system('ping ' + host)"):
+    print(f.severity, f.owasp, f.cwe, "->", f.message)
+# critical A03:2021-Injection CWE-78 -> os.system() with a dynamic command string is command injection
+```
+
+> Scope: this is a **detection** ("find & fix") tool — it never attacks live systems. It complements, rather than replaces, a full dynamic pentester like Strix.
+
+### 5 · Dynamic security testing — DAST / pentest / stress — [`results/dast.json`](results/dast.json)
+
+The dynamic counterpart to the static scanner: three tools that probe a *running* web app. To keep results reproducible and safe, `scripts/run_dast.py` spins up a bundled **intentionally-vulnerable local mock app** (`sentinel/mocktarget.py`) on `127.0.0.1` and tests against that — nothing external is touched.
+
+- **Web security scanner** — missing security headers (CSP/HSTS/X-Frame-Options/…), weak cookie flags, server-version disclosure, exposed sensitive files (`.env`, `.git/config`). → **10 findings** on the vulnerable page, **0** header/cookie findings on the hardened control.
+- **Injection pentester** — a **10-technique battery** that only reports a finding when it **confirms the hit** (Strix's "no PoC, no finding"): reflected **XSS**, error-based **SQLi**, **SSTI**, **path traversal**, **command injection**, **NoSQL injection**, blind **out-of-band SSRF** (proven via a loopback callback collaborator), **XXE-over-HTTP** (POSTed XML with an external entity), **IDOR** (same request, other users' object ids), and **auth-bypass / broken access control**. → **10/10 confirmed**, **0 false positives** on the secured control endpoints (`/safe-search`, `/account-secure`, `/admin-secure`).
+- **Stress tester** — concurrent load with latency percentiles, throughput and HTTP-429 rate-limit detection. → **238 rps**, p50 **6.5 ms**, p99 1240 ms over 300 requests @ concurrency 25.
+
+![DAST latency](results/charts/dast_latency.png)
+
+```python
+from sentinel import WebSecurityScanner, InjectionTester, StressTester
+
+WebSecurityScanner().scan("http://127.0.0.1:8000")            # passive checks
+InjectionTester().confirmed("http://127.0.0.1:8000", "/search", "q")   # validated PoCs
+StressTester().run("http://127.0.0.1:8000/api", requests=300, concurrency=25)
+```
+
+> 🔒 **Authorization guard.** Every DAST scanner **refuses any non-loopback host** unless you pass `allow_remote=True`. Only ever test systems you own or are explicitly authorized to test — this is a defensive tool, not a weapon for scanning third parties.
 
 ---
 

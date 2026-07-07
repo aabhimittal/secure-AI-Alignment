@@ -53,7 +53,8 @@ SPACE_REQUIREMENTS = "jsonschema>=4.0\n"
 # Only what the app needs at runtime.
 UPLOAD = ["app.py",
           "sentinel/__init__.py", "sentinel/jailbreak.py", "sentinel/bias.py",
-          "sentinel/formatctl.py", "sentinel/models.py"]
+          "sentinel/formatctl.py", "sentinel/models.py", "sentinel/appsec.py",
+          "sentinel/dast.py", "sentinel/mocktarget.py"]
 
 
 def main():

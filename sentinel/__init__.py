@@ -15,8 +15,10 @@ The detectors are pure-Python (standard library only) so that every number in
 from .jailbreak import JailbreakGuard, JailbreakVerdict
 from .bias import BiasProbe, BiasReport
 from .formatctl import FormatController, FormatResult
+from .appsec import AppSecScanner, Finding
+from .dast import WebSecurityScanner, InjectionTester, StressTester
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "JailbreakGuard",
@@ -25,5 +27,10 @@ __all__ = [
     "BiasReport",
     "FormatController",
     "FormatResult",
+    "AppSecScanner",
+    "Finding",
+    "WebSecurityScanner",
+    "InjectionTester",
+    "StressTester",
     "__version__",
 ]

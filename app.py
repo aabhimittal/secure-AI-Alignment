@@ -19,10 +19,21 @@ import gradio as gr
 from sentinel.jailbreak import JailbreakGuard, TRANSFORMS
 from sentinel.bias import BiasProbe, lexicon_sentiment
 from sentinel.formatctl import FormatController
+from sentinel.appsec import AppSecScanner, SEVERITY_ORDER
+from sentinel.dast import WebSecurityScanner, InjectionTester, StressTester
+from sentinel.mocktarget import MockTarget
 from sentinel.models import demonstrator_scorer, HFToxicityScorer
 
 GUARD = JailbreakGuard()
 FMT = FormatController()
+SAST = AppSecScanner()
+
+# A bundled, intentionally-vulnerable app on loopback — the DAST tab's only
+# target, so the demo can never be pointed at a third-party host.
+try:
+    MOCK = MockTarget().__enter__()
+except Exception:
+    MOCK = None
 
 # Try to wire up a real production classifier; fall back gracefully.
 try:
@@ -109,15 +120,67 @@ def guard_format(raw, kind, schema_text):
     return "\n".join(md), pretty
 
 
+def scan_code(code):
+    findings = SAST.scan(code or "")
+    if not findings:
+        return "### ✅ No vulnerabilities detected", []
+    rows = [[f.severity, f.owasp, f.cwe, f.line, f.message] for f in findings]
+    sev = {}
+    for f in findings:
+        sev[f.severity] = sev.get(f.severity, 0) + 1
+    head = "  ".join(f"**{k}**: {v}" for k, v in
+                     sorted(sev.items(), key=lambda kv: -SEVERITY_ORDER[kv[0]]))
+    return f"### 🛡️ {len(findings)} finding(s)\n{head}", rows
+
+
+def run_dast(scan_type):
+    if MOCK is None:
+        return "DAST target unavailable in this environment.", []
+    base = MOCK.base_url
+    rows, lines = [], []
+    if scan_type in ("Web security", "Run all"):
+        findings = WebSecurityScanner().scan(base)
+        lines.append(f"**Web security:** {len(findings)} findings")
+        rows += [[f.severity, "web", f.category, f.message] for f in findings]
+    if scan_type in ("Injection pentest", "Run all"):
+        battery = InjectionTester().full_scan(base)
+        confirmed = 0
+        for r in battery:
+            if r.confirmed:
+                confirmed += 1
+                rows.append(["confirmed", "pentest", r.category,
+                             f"{r.cwe} · payload: {r.payload[:48]}"])
+        lines.append(f"**Injection pentest:** {confirmed}/{len(battery)} techniques "
+                     f"confirmed (XSS, SQLi, SSTI, traversal, cmd-i, NoSQLi, OOB-SSRF, "
+                     f"XXE, IDOR, auth-bypass)")
+    if scan_type in ("Stress test", "Run all"):
+        rep = StressTester().run(base + "/api", requests=150, concurrency=15)
+        lines.append(f"**Stress test:** {rep.throughput_rps:.0f} rps · "
+                     f"p50 {rep.latency_ms['p50']:.1f} ms · p99 {rep.latency_ms['p99']:.1f} ms · "
+                     f"{rep.ok} ok / {rep.errors} err")
+    return "### 🕷️ DAST results\n" + "  \n".join(lines), rows
+
+
 EXAMPLE_MESSY = 'Sure! Here is the JSON:\n```json\n{\'name\': \'Ada\', \'active\': True, \'tags\': [\'x\', \'y\',],}\n```'
+
+EXAMPLE_VULN_CODE = (
+    "import os, pickle, requests\n"
+    "def handler(req):\n"
+    "    cur.execute(f\"SELECT * FROM users WHERE id = {req['id']}\")\n"
+    "    os.system('ping ' + req['host'])\n"
+    "    data = pickle.loads(req['blob'])\n"
+    "    requests.get(req['url'], verify=False)\n"
+    "    API_KEY = \"demo-not-a-real-hardcoded-secret-123\"\n"
+)
 
 with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         "# 🛡️ SentinelLLM\n"
         "### A self-contained safety & alignment test harness for LLMs\n"
-        "Three production guardrails — **jailbreak detection**, **counterfactual "
-        "bias probing**, and **structured-output conformance** — running live on "
-        "a deterministic, offline core. "
+        "Five security & safety tools — **jailbreak detection**, **counterfactual "
+        "bias probing**, **structured-output conformance**, an OWASP Top-10 "
+        "**code scanner (SAST)**, and a **live pentest (DAST)** — running on a "
+        "deterministic, offline core. "
         "[Code & reproducible benchmarks on GitHub »]"
         "(https://github.com/aabhimittal/secure-AI-Alignment)"
     )
@@ -167,6 +230,32 @@ with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.them
         fmt_out = gr.Markdown()
         fmt_pretty = gr.Code(label="Extracted / repaired payload")
         fmt_btn.click(guard_format, [fmt_in, fmt_kind, fmt_schema], [fmt_out, fmt_pretty])
+
+    with gr.Tab("🔎 Code Scanner (SAST)"):
+        gr.Markdown("Paste Python code. A Strix-inspired, offline OWASP Top-10 "
+                    "SAST scanner flags injection, SSRF, deserialization, weak "
+                    "crypto, hardcoded secrets and more — with CWE + fix hints.")
+        sast_in = gr.Code(label="Python source", language="python", value=EXAMPLE_VULN_CODE)
+        sast_btn = gr.Button("Scan for vulnerabilities", variant="primary")
+        sast_out = gr.Markdown()
+        sast_tbl = gr.Dataframe(headers=["severity", "OWASP", "CWE", "line", "message"],
+                                label="Findings", wrap=True)
+        sast_btn.click(scan_code, [sast_in], [sast_out, sast_tbl])
+
+    with gr.Tab("🕷️ Live Pentest (DAST)"):
+        gr.Markdown(
+            "Run a **live** web pentest against a bundled, intentionally-vulnerable "
+            "mock app running on loopback inside this Space. Injection findings are "
+            "**confirmed with response evidence** (no PoC, no finding). "
+            "🔒 For safety the demo only targets its own built-in app — never an "
+            "external host.")
+        dast_kind = gr.Radio(["Run all", "Web security", "Injection pentest", "Stress test"],
+                             value="Run all", label="Scan")
+        dast_btn = gr.Button("Run live scan", variant="primary")
+        dast_out = gr.Markdown()
+        dast_tbl = gr.Dataframe(headers=["severity/status", "phase", "category", "detail"],
+                                label="Findings & confirmed PoCs", wrap=True)
+        dast_btn.click(run_dast, [dast_kind], [dast_out, dast_tbl])
 
     gr.Markdown(
         "---\n*Deterministic core — no API key required. "
