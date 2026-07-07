@@ -13,6 +13,7 @@ Three production trust-and-safety guardrails, in one small, auditable package:
 | ⚖️ **Bias mitigation** | Counterfactual demographic probing of any scorer/model | **0 false-bias flags** on an identity-blind scorer; **recovers injected bias** and correctly names *Muslim / Middle-Eastern / transgender* as the least-favoured groups |
 | 🧩 **Output-format control** | Extracts, repairs & schema-validates JSON / XML | Structured-output conformance lifted from **27 % → 93 %** on messy model output |
 | 🔎 **AppSec code scanning** | Strix-inspired OWASP Top-10 SAST for Python (AST-based) | **P 1.00 · R 1.00 · F1 1.00** on a labeled vuln/safe corpus (0 false positives); 13 vuln classes, CWE + fix per finding |
+| 🕷️ **DAST / pentest / stress** | Live-app security testing against a running target | **5/5 injection PoCs confirmed** (XSS, SQLi, SSTI, traversal, cmd-i) with 0 false positives; 10 header/config findings; stress: **238 rps**, p50 6.5 ms |
 
 > **Every number above is reproduced offline by `python scripts/run_eval.py`** — pure standard library, no API key, no model download. The results in [`results/`](results/) are committed so they can be diffed and audited.
 
@@ -126,6 +127,26 @@ for f in AppSecScanner().scan("import os; os.system('ping ' + host)"):
 ```
 
 > Scope: this is a **detection** ("find & fix") tool — it never attacks live systems. It complements, rather than replaces, a full dynamic pentester like Strix.
+
+### 5 · Dynamic security testing — DAST / pentest / stress — [`results/dast.json`](results/dast.json)
+
+The dynamic counterpart to the static scanner: three tools that probe a *running* web app. To keep results reproducible and safe, `scripts/run_dast.py` spins up a bundled **intentionally-vulnerable local mock app** (`sentinel/mocktarget.py`) on `127.0.0.1` and tests against that — nothing external is touched.
+
+- **Web security scanner** — missing security headers (CSP/HSTS/X-Frame-Options/…), weak cookie flags, server-version disclosure, exposed sensitive files (`.env`, `.git/config`). → **10 findings** on the vulnerable page, **0** header/cookie findings on the hardened control.
+- **Injection pentester** — fires XSS / SQLi / SSTI / path-traversal / command-injection payloads and only reports a finding when it **confirms the hit with response evidence** (Strix's "no PoC, no finding"). → **5/5 vulnerability classes confirmed**, **0 false positives** on the safe (escaped) endpoint.
+- **Stress tester** — concurrent load with latency percentiles, throughput and HTTP-429 rate-limit detection. → **238 rps**, p50 **6.5 ms**, p99 1240 ms over 300 requests @ concurrency 25.
+
+![DAST latency](results/charts/dast_latency.png)
+
+```python
+from sentinel import WebSecurityScanner, InjectionTester, StressTester
+
+WebSecurityScanner().scan("http://127.0.0.1:8000")            # passive checks
+InjectionTester().confirmed("http://127.0.0.1:8000", "/search", "q")   # validated PoCs
+StressTester().run("http://127.0.0.1:8000/api", requests=300, concurrency=25)
+```
+
+> 🔒 **Authorization guard.** Every DAST scanner **refuses any non-loopback host** unless you pass `allow_remote=True`. Only ever test systems you own or are explicitly authorized to test — this is a defensive tool, not a weapon for scanning third parties.
 
 ---
 

@@ -16,8 +16,9 @@ from .jailbreak import JailbreakGuard, JailbreakVerdict
 from .bias import BiasProbe, BiasReport
 from .formatctl import FormatController, FormatResult
 from .appsec import AppSecScanner, Finding
+from .dast import WebSecurityScanner, InjectionTester, StressTester
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "JailbreakGuard",
@@ -28,5 +29,8 @@ __all__ = [
     "FormatResult",
     "AppSecScanner",
     "Finding",
+    "WebSecurityScanner",
+    "InjectionTester",
+    "StressTester",
     "__version__",
 ]

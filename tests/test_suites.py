@@ -12,6 +12,9 @@ from sentinel.formatctl import FormatController
 from sentinel.models import demonstrator_scorer
 from sentinel.nim import NIMSafetyGuard, NIMClient
 from sentinel.appsec import AppSecScanner
+from sentinel.dast import (
+    WebSecurityScanner, InjectionTester, StressTester, AuthorizationError)
+from sentinel.mocktarget import MockTarget
 
 
 # ----------------------------- jailbreak --------------------------------- #
@@ -186,3 +189,49 @@ def test_sast_findings_carry_cwe_and_owasp():
     assert f.cwe.startswith("CWE-")
     assert "2021" in f.owasp
     assert f.severity in {"low", "medium", "high", "critical"}
+
+
+# ------------------------------- DAST ------------------------------------ #
+
+def test_dast_refuses_remote_without_optin():
+    for scanner in (WebSecurityScanner(), InjectionTester(), StressTester()):
+        try:
+            if isinstance(scanner, WebSecurityScanner):
+                scanner.scan("http://example.com")
+            elif isinstance(scanner, InjectionTester):
+                scanner.test("http://example.com", "/x", "q")
+            else:
+                scanner.run("http://example.com")
+        except AuthorizationError:
+            continue
+        assert False, "expected AuthorizationError for non-loopback host"
+
+
+def test_dast_web_scanner_flags_missing_headers():
+    with MockTarget() as t:
+        findings = WebSecurityScanner().scan(t.base_url)
+        cats = {f.category for f in findings}
+        assert "security_headers" in cats
+        assert "cookie" in cats
+        assert any(f.category == "info_disclosure" for f in findings)  # exposed /.env
+        # hardened endpoint: no header/cookie findings
+        secure = WebSecurityScanner().scan(t.base_url + "/secure")
+        assert not any(f.category in ("security_headers", "cookie") for f in secure)
+
+
+def test_dast_injection_confirms_and_avoids_false_positives():
+    with MockTarget() as t:
+        it = InjectionTester()
+        assert it.confirmed(t.base_url, "/search", "q")        # reflected XSS
+        assert it.confirmed(t.base_url, "/user", "id")         # error-based SQLi
+        assert it.confirmed(t.base_url, "/render", "name")     # SSTI
+        # the escaped endpoint must NOT confirm XSS
+        assert not it.confirmed(t.base_url, "/safe-search", "q")
+
+
+def test_dast_stress_reports_latency_and_throughput():
+    with MockTarget() as t:
+        rep = StressTester().run(t.base_url + "/api", requests=40, concurrency=8)
+        assert rep.ok == 40 and rep.errors == 0
+        assert rep.throughput_rps > 0
+        assert rep.latency_ms["p99"] >= rep.latency_ms["p50"]
