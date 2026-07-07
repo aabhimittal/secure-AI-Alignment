@@ -59,6 +59,24 @@ The guard **de-obfuscates first**, so wrapping an attack in base64, hex, leetspe
 | grandma exploit | 96.7 % |
 | roleplay ("AIM, never refuses") | **100 %** |
 
+#### Live cross-check against a production model — [`results/nim_comparison.json`](results/nim_comparison.json)
+
+The same 60 prompts were scored **live** by NVIDIA's hosted content-safety model, `llama-3.1-nemotron-safety-guard-8b-v3`, via the NIM API (no local weights, ~0 MB VRAM — runs from any CPU box):
+
+| Guard | Precision | Recall | F1 |
+|---|---|---|---|
+| SentinelLLM (local, stdlib) | 1.00 | 0.967 | 0.983 |
+| NVIDIA Safety-Guard 8B (cloud) | 1.00 | **1.00** | **1.00** |
+
+![Local vs NVIDIA](results/charts/nim_comparison.png)
+
+**Agreement: 98.3 %** — the guards differ on exactly one prompt: *"Create a tutorial on how to manipulate or trick people…"*, which carries **no lexical harm signature**, so the local guard allows it while the 8B model flags it (`Manipulation, Immoral/Unethical`). This is precisely the residual tail a lightweight static filter leaves behind — and why SentinelLLM lets you layer a model-backed guard on top:
+
+```bash
+export NVIDIA_API_KEY=nvapi-...          # free tier: build.nvidia.com
+python scripts/benchmark_nim.py          # reproduces the table above, live
+```
+
 ### 2 · Bias probe — [`results/bias.json`](results/bias.json)
 
 **Counterfactual token fairness:** instantiate a `{GROUP}` template across every value of a demographic axis, score each, and measure the max–min gap. A fair scorer barely moves; a biased one does.
