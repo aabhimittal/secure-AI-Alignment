@@ -172,7 +172,7 @@ def test_sast_flags_ssrf_dynamic_only():
 
 def test_sast_flags_hardcoded_secret_with_prefix():
     s = AppSecScanner()
-    assert any(x.category == "secrets" for x in s.scan('DB_PASSWORD = "hunter2!!"'))
+    assert any(x.category == "secrets" for x in s.scan('DB_PASSWORD = "hunter2!!"'))  # nosec hardcoded_secret: scanner test fixture
 
 
 def test_sast_verify_false_and_jwt_none():
