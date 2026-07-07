@@ -20,11 +20,20 @@ from sentinel.jailbreak import JailbreakGuard, TRANSFORMS
 from sentinel.bias import BiasProbe, lexicon_sentiment
 from sentinel.formatctl import FormatController
 from sentinel.appsec import AppSecScanner, SEVERITY_ORDER
+from sentinel.dast import WebSecurityScanner, InjectionTester, StressTester
+from sentinel.mocktarget import MockTarget
 from sentinel.models import demonstrator_scorer, HFToxicityScorer
 
 GUARD = JailbreakGuard()
 FMT = FormatController()
 SAST = AppSecScanner()
+
+# A bundled, intentionally-vulnerable app on loopback — the DAST tab's only
+# target, so the demo can never be pointed at a third-party host.
+try:
+    MOCK = MockTarget().__enter__()
+except Exception:
+    MOCK = None
 
 # Try to wire up a real production classifier; fall back gracefully.
 try:
@@ -124,6 +133,36 @@ def scan_code(code):
     return f"### 🛡️ {len(findings)} finding(s)\n{head}", rows
 
 
+def run_dast(scan_type):
+    if MOCK is None:
+        return "DAST target unavailable in this environment.", []
+    base = MOCK.base_url
+    rows, lines = [], []
+    if scan_type in ("Web security", "Run all"):
+        findings = WebSecurityScanner().scan(base)
+        lines.append(f"**Web security:** {len(findings)} findings")
+        rows += [[f.severity, "web", f.category, f.message] for f in findings]
+    if scan_type in ("Injection pentest", "Run all"):
+        it = InjectionTester()
+        targets = [("/search", "q"), ("/user", "id"), ("/render", "name"),
+                   ("/file", "path"), ("/ping", "host"), ("/safe-search", "q")]
+        confirmed = 0
+        for path, param in targets:
+            for r in it.test(base, path, param):
+                if r.confirmed:
+                    confirmed += 1
+                    rows.append(["confirmed", "pentest", r.category,
+                                 f"{path}?{param}=  payload: {r.payload}"])
+        lines.append(f"**Injection pentest:** {confirmed} confirmed PoC(s) "
+                     f"(safe endpoint /safe-search stays clean)")
+    if scan_type in ("Stress test", "Run all"):
+        rep = StressTester().run(base + "/api", requests=150, concurrency=15)
+        lines.append(f"**Stress test:** {rep.throughput_rps:.0f} rps · "
+                     f"p50 {rep.latency_ms['p50']:.1f} ms · p99 {rep.latency_ms['p99']:.1f} ms · "
+                     f"{rep.ok} ok / {rep.errors} err")
+    return "### 🕷️ DAST results\n" + "  \n".join(lines), rows
+
+
 EXAMPLE_MESSY = 'Sure! Here is the JSON:\n```json\n{\'name\': \'Ada\', \'active\': True, \'tags\': [\'x\', \'y\',],}\n```'
 
 EXAMPLE_VULN_CODE = (
@@ -140,9 +179,10 @@ with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.them
     gr.Markdown(
         "# 🛡️ SentinelLLM\n"
         "### A self-contained safety & alignment test harness for LLMs\n"
-        "Four production guardrails — **jailbreak detection**, **counterfactual "
-        "bias probing**, **structured-output conformance**, and an OWASP Top-10 "
-        "**code scanner** — running live on a deterministic, offline core. "
+        "Five security & safety tools — **jailbreak detection**, **counterfactual "
+        "bias probing**, **structured-output conformance**, an OWASP Top-10 "
+        "**code scanner (SAST)**, and a **live pentest (DAST)** — running on a "
+        "deterministic, offline core. "
         "[Code & reproducible benchmarks on GitHub »]"
         "(https://github.com/aabhimittal/secure-AI-Alignment)"
     )
@@ -203,6 +243,21 @@ with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.them
         sast_tbl = gr.Dataframe(headers=["severity", "OWASP", "CWE", "line", "message"],
                                 label="Findings", wrap=True)
         sast_btn.click(scan_code, [sast_in], [sast_out, sast_tbl])
+
+    with gr.Tab("🕷️ Live Pentest (DAST)"):
+        gr.Markdown(
+            "Run a **live** web pentest against a bundled, intentionally-vulnerable "
+            "mock app running on loopback inside this Space. Injection findings are "
+            "**confirmed with response evidence** (no PoC, no finding). "
+            "🔒 For safety the demo only targets its own built-in app — never an "
+            "external host.")
+        dast_kind = gr.Radio(["Run all", "Web security", "Injection pentest", "Stress test"],
+                             value="Run all", label="Scan")
+        dast_btn = gr.Button("Run live scan", variant="primary")
+        dast_out = gr.Markdown()
+        dast_tbl = gr.Dataframe(headers=["severity/status", "phase", "category", "detail"],
+                                label="Findings & confirmed PoCs", wrap=True)
+        dast_btn.click(run_dast, [dast_kind], [dast_out, dast_tbl])
 
     gr.Markdown(
         "---\n*Deterministic core — no API key required. "
