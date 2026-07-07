@@ -36,22 +36,22 @@ def main():
         page_level = {"security_headers", "cookie"}
         secure_page_findings = [f for f in web_secure if f.category in page_level]
 
-        # 2 · active injection pentest across vulnerable + safe endpoints
+        # 2 · active injection pentest — full battery across 10 techniques
         it = InjectionTester()
-        pentest = {
-            "xss@/search":            it.test(base, "/search", "q", ["xss"]),
-            "xss@/safe-search":       it.test(base, "/safe-search", "q", ["xss"]),
-            "sqli@/user":             it.test(base, "/user", "id", ["sql_injection"]),
-            "ssti@/render":           it.test(base, "/render", "name", ["ssti"]),
-            "traversal@/file":        it.test(base, "/file", "path", ["path_traversal"]),
-            "cmdi@/ping":             it.test(base, "/ping", "host", ["command_injection"]),
+        battery = it.full_scan(base)
+        confirmed = [r.to_dict() for r in battery if r.confirmed]
+
+        # precision controls: secured endpoints must NOT confirm
+        controls = {
+            "xss@/safe-search": any(r.confirmed for r in
+                                    it.test(base, "/safe-search", "q", ["xss"])),
+            "idor@/account-secure": it.test_idor(base, "/account-secure", "id").confirmed,
+            "authz@/admin-secure": it.test_auth_bypass(base, "/admin-secure").confirmed,
         }
-        confirmed = {k: [r.to_dict() for r in v if r.confirmed] for k, v in pentest.items()}
 
         # 3 · stress test the API endpoint
         stress = StressTester().run(base + "/api", requests=300, concurrency=25)
 
-    n_confirmed = sum(len(v) for v in confirmed.values())
     out = {
         "target": "local mock app (127.0.0.1)",
         "web_security": {
@@ -60,10 +60,11 @@ def main():
             "hardened_page_header_cookie_findings": len(secure_page_findings),  # expected 0
         },
         "pentest": {
-            "endpoints_tested": len(pentest),
-            "confirmed_vulnerabilities": n_confirmed,
-            "confirmed": {k: v for k, v in confirmed.items() if v},
-            "safe_endpoint_confirmed": len(confirmed.get("xss@/safe-search", [])),  # expected 0
+            "techniques_tested": len(battery),
+            "confirmed_vulnerabilities": len(confirmed),
+            "confirmed": confirmed,
+            "control_false_positives": sum(1 for v in controls.values() if v),  # expected 0
+            "controls": controls,
         },
         "stress": stress.to_dict(),
     }
@@ -72,8 +73,9 @@ def main():
 
     print(f"web-security: {len(web)} findings on vulnerable page; "
           f"{len(secure_page_findings)} header/cookie findings on hardened page (want 0)")
-    print(f"pentest: {n_confirmed} confirmed PoCs across {len(pentest)} endpoints; "
-          f"safe endpoint false-positives: {out['pentest']['safe_endpoint_confirmed']} (want 0)")
+    print(f"pentest: {len(confirmed)}/{len(battery)} techniques confirmed "
+          f"({', '.join(r['category'] for r in confirmed)}); "
+          f"control false-positives: {out['pentest']['control_false_positives']} (want 0)")
     print(f"stress: {stress.throughput_rps:.0f} rps, "
           f"p50={stress.latency_ms['p50']:.1f}ms p99={stress.latency_ms['p99']:.1f}ms, "
           f"{stress.ok} ok / {stress.errors} err")

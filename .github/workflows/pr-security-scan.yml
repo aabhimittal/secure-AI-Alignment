@@ -1,0 +1,47 @@
+name: PR Security Scan (SAST)
+
+# Runs the SentinelLLM SAST scanner over the files changed in a pull request
+# and fails the check if any HIGH+ severity vulnerability is introduced.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sast-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # need history to diff against the base branch
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      - name: Scan changed files (HIGH+ fails the PR)
+        run: |
+          python scripts/scan.py \
+            --target ./ \
+            --diff-base "origin/${{ github.base_ref }}" \
+            --min-severity high \
+            --ci
+
+      - name: Full JSON report (informational)
+        if: always()
+        run: |
+          python scripts/scan.py --target ./ \
+            --diff-base "origin/${{ github.base_ref }}" \
+            --format json > sast-report.json || true
+
+      - name: Upload SAST report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-report
+          path: sast-report.json

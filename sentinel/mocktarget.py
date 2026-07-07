@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import html
 import threading
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 SQL_ERROR = "You have an error in your SQL syntax near"
+PASSWD = "root:x:0:0:root:/root:/bin/bash"  # nosec hardcoded_secret: test fixture, not a credential
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -92,9 +94,61 @@ class _Handler(BaseHTTPRequestHandler):
         # --- exposed sensitive files ----------------------------------------
         elif path in ("/.env", "/.git/config"):
             self._send(200, "SECRET_KEY=super-secret\nDB_PASSWORD=hunter2")
+        # --- NoSQL injection (operator / boolean auth bypass) ---------------
+        elif path == "/nlogin":
+            pw = q.get("pw", [""])[0]
+            if any(op in pw for op in ("$ne", "$gt", "||", "'=='")):
+                self._send(200, "Login OK (auth bypassed) welcome admin")
+            else:
+                self._send(401, "invalid credentials")
+        # --- SSRF sink: fetches a URL server-side (loopback only) -----------
+        elif path == "/fetch":
+            url = q.get("url", [""])[0]
+            host = urlparse(url).hostname or ""
+            if host in ("127.0.0.1", "localhost", "::1"):
+                try:
+                    urllib.request.urlopen(url, timeout=3).read()   # nosec ssrf: intentional SSRF sink for scanner testing (loopback-guarded)
+                    self._send(200, "fetched")
+                except Exception:
+                    self._send(200, "fetch failed")
+            else:
+                # do not proxy to non-loopback hosts even in the mock
+                self._send(200, "blocked non-loopback")
+        # --- IDOR: returns any account with no authorization check ----------
+        elif path == "/account":
+            aid = q.get("id", ["0"])[0]
+            self._send(200, f"account id={aid} owner=user{aid} balance=${aid}00")
+        elif path == "/account-secure":
+            aid = q.get("id", ["0"])[0]
+            cookie = self.headers.get("Cookie", "")
+            if f"session=user{aid}" in cookie:
+                self._send(200, f"account id={aid} owner=user{aid} balance=${aid}00")
+            else:
+                self._send(403, "forbidden")
+        # --- broken access control: admin panel with no auth ----------------
+        elif path == "/admin":
+            self._send(200, "ADMIN PANEL — all users, delete, config")
+        elif path == "/admin-secure":
+            if "role=admin" in self.headers.get("Cookie", ""):
+                self._send(200, "ADMIN PANEL — all users, delete, config")
+            else:
+                self._send(403, "forbidden")
         # --- rate-limited API (for stress testing) --------------------------
         elif path == "/api":
             self._send(200, "{\"ok\": true}", headers={"Content-Type": "application/json"})
+        else:
+            self._send(404, "not found")
+
+    def do_POST(self):
+        u = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(length).decode("utf-8", "ignore") if length else ""
+        # --- XXE: parser that "resolves" external entities ------------------
+        if u.path == "/xml":
+            if "<!ENTITY" in body and "file:///etc/passwd" in body and "&xxe;" in body:
+                self._send(200, f"<result>{PASSWD}</result>")   # entity expanded
+            else:
+                self._send(200, "<result>ok</result>")
         else:
             self._send(404, "not found")
 

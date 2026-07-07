@@ -183,6 +183,13 @@ def test_sast_verify_false_and_jwt_none():
                for x in s.scan("jwt.decode(t, k, algorithms=['none'])"))
 
 
+def test_sast_nosec_suppression():
+    s = AppSecScanner()
+    assert s.scan("eval(x)")                       # unmarked -> flagged
+    assert not s.scan("eval(x)  # nosec")          # bare nosec -> suppressed
+    assert s.scan("eval(x)  # nosec ssrf")         # wrong rule id -> still flagged
+
+
 def test_sast_findings_carry_cwe_and_owasp():
     s = AppSecScanner()
     f = s.scan("import os\nos.system('ls ' + x)")[0]
@@ -235,3 +242,35 @@ def test_dast_stress_reports_latency_and_throughput():
         assert rep.ok == 40 and rep.errors == 0
         assert rep.throughput_rps > 0
         assert rep.latency_ms["p99"] >= rep.latency_ms["p50"]
+
+
+def test_dast_full_battery_confirms_all_ten_classes():
+    with MockTarget() as t:
+        results = InjectionTester().full_scan(t.base_url)
+        cats = {r.category for r in results if r.confirmed}
+        for expected in ("xss", "sql_injection", "ssti", "path_traversal",
+                         "command_injection", "nosql_injection", "ssrf", "xxe",
+                         "idor", "auth_bypass"):
+            assert expected in cats, f"{expected} not confirmed"
+
+
+def test_dast_oob_ssrf_confirmed_via_callback():
+    with MockTarget() as t:
+        r = InjectionTester().test_ssrf_oob(t.base_url, "/fetch", "url")
+        assert r.confirmed and "callback" in r.evidence
+
+
+def test_dast_xxe_over_http():
+    with MockTarget() as t:
+        assert InjectionTester().test_xxe(t.base_url, "/xml").confirmed
+
+
+def test_dast_idor_and_authz_controls_are_clean():
+    with MockTarget() as t:
+        it = InjectionTester()
+        # vulnerable endpoints confirm
+        assert it.test_idor(t.base_url, "/account", "id").confirmed
+        assert it.test_auth_bypass(t.base_url, "/admin").confirmed
+        # secured counterparts do NOT (precision)
+        assert not it.test_idor(t.base_url, "/account-secure", "id").confirmed
+        assert not it.test_auth_bypass(t.base_url, "/admin-secure").confirmed

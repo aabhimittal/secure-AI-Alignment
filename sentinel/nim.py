@@ -50,7 +50,7 @@ class NIMClient:
                      "Content-Type": "application/json",
                      "Accept": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec ssrf: fixed NVIDIA NIM endpoint
             data = json.loads(r.read().decode())
         return data["choices"][0]["message"]["content"]
 

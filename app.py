@@ -143,18 +143,16 @@ def run_dast(scan_type):
         lines.append(f"**Web security:** {len(findings)} findings")
         rows += [[f.severity, "web", f.category, f.message] for f in findings]
     if scan_type in ("Injection pentest", "Run all"):
-        it = InjectionTester()
-        targets = [("/search", "q"), ("/user", "id"), ("/render", "name"),
-                   ("/file", "path"), ("/ping", "host"), ("/safe-search", "q")]
+        battery = InjectionTester().full_scan(base)
         confirmed = 0
-        for path, param in targets:
-            for r in it.test(base, path, param):
-                if r.confirmed:
-                    confirmed += 1
-                    rows.append(["confirmed", "pentest", r.category,
-                                 f"{path}?{param}=  payload: {r.payload}"])
-        lines.append(f"**Injection pentest:** {confirmed} confirmed PoC(s) "
-                     f"(safe endpoint /safe-search stays clean)")
+        for r in battery:
+            if r.confirmed:
+                confirmed += 1
+                rows.append(["confirmed", "pentest", r.category,
+                             f"{r.cwe} · payload: {r.payload[:48]}"])
+        lines.append(f"**Injection pentest:** {confirmed}/{len(battery)} techniques "
+                     f"confirmed (XSS, SQLi, SSTI, traversal, cmd-i, NoSQLi, OOB-SSRF, "
+                     f"XXE, IDOR, auth-bypass)")
     if scan_type in ("Stress test", "Run all"):
         rep = StressTester().run(base + "/api", requests=150, concurrency=15)
         lines.append(f"**Stress test:** {rep.throughput_rps:.0f} rps · "

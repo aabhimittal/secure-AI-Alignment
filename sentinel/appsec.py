@@ -128,7 +128,21 @@ class AppSecScanner:
             if isinstance(node, ast.Call):
                 findings.extend(self._scan_call(node, lines))
 
+        findings = [f for f in findings if not self._suppressed(f, lines)]
         return self._dedupe(findings)
+
+    @staticmethod
+    def _suppressed(f: Finding, lines: List[str]) -> bool:
+        """Honour an inline ``# nosec`` (optionally ``# nosec <rule_id>``) marker."""
+        if not (0 < f.line <= len(lines)):
+            return False
+        line = lines[f.line - 1]
+        idx = line.lower().find("# nosec")
+        if idx == -1:
+            return False
+        rest = line[idx + len("# nosec"):].strip()
+        # bare "# nosec" suppresses all; "# nosec <id>" suppresses only that rule
+        return (not rest) or (f.rule_id in rest) or (f.category in rest)
 
     # -- secrets ---------------------------------------------------------- #
 

