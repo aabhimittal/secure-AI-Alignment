@@ -19,10 +19,12 @@ import gradio as gr
 from sentinel.jailbreak import JailbreakGuard, TRANSFORMS
 from sentinel.bias import BiasProbe, lexicon_sentiment
 from sentinel.formatctl import FormatController
+from sentinel.appsec import AppSecScanner, SEVERITY_ORDER
 from sentinel.models import demonstrator_scorer, HFToxicityScorer
 
 GUARD = JailbreakGuard()
 FMT = FormatController()
+SAST = AppSecScanner()
 
 # Try to wire up a real production classifier; fall back gracefully.
 try:
@@ -109,15 +111,38 @@ def guard_format(raw, kind, schema_text):
     return "\n".join(md), pretty
 
 
+def scan_code(code):
+    findings = SAST.scan(code or "")
+    if not findings:
+        return "### ✅ No vulnerabilities detected", []
+    rows = [[f.severity, f.owasp, f.cwe, f.line, f.message] for f in findings]
+    sev = {}
+    for f in findings:
+        sev[f.severity] = sev.get(f.severity, 0) + 1
+    head = "  ".join(f"**{k}**: {v}" for k, v in
+                     sorted(sev.items(), key=lambda kv: -SEVERITY_ORDER[kv[0]]))
+    return f"### 🛡️ {len(findings)} finding(s)\n{head}", rows
+
+
 EXAMPLE_MESSY = 'Sure! Here is the JSON:\n```json\n{\'name\': \'Ada\', \'active\': True, \'tags\': [\'x\', \'y\',],}\n```'
+
+EXAMPLE_VULN_CODE = (
+    "import os, pickle, requests\n"
+    "def handler(req):\n"
+    "    cur.execute(f\"SELECT * FROM users WHERE id = {req['id']}\")\n"
+    "    os.system('ping ' + req['host'])\n"
+    "    data = pickle.loads(req['blob'])\n"
+    "    requests.get(req['url'], verify=False)\n"
+    "    API_KEY = \"demo-not-a-real-hardcoded-secret-123\"\n"
+)
 
 with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         "# 🛡️ SentinelLLM\n"
         "### A self-contained safety & alignment test harness for LLMs\n"
-        "Three production guardrails — **jailbreak detection**, **counterfactual "
-        "bias probing**, and **structured-output conformance** — running live on "
-        "a deterministic, offline core. "
+        "Four production guardrails — **jailbreak detection**, **counterfactual "
+        "bias probing**, **structured-output conformance**, and an OWASP Top-10 "
+        "**code scanner** — running live on a deterministic, offline core. "
         "[Code & reproducible benchmarks on GitHub »]"
         "(https://github.com/aabhimittal/secure-AI-Alignment)"
     )
@@ -167,6 +192,17 @@ with gr.Blocks(title="SentinelLLM — Safety & Alignment Harness", theme=gr.them
         fmt_out = gr.Markdown()
         fmt_pretty = gr.Code(label="Extracted / repaired payload")
         fmt_btn.click(guard_format, [fmt_in, fmt_kind, fmt_schema], [fmt_out, fmt_pretty])
+
+    with gr.Tab("🔎 Code Scanner (SAST)"):
+        gr.Markdown("Paste Python code. A Strix-inspired, offline OWASP Top-10 "
+                    "SAST scanner flags injection, SSRF, deserialization, weak "
+                    "crypto, hardcoded secrets and more — with CWE + fix hints.")
+        sast_in = gr.Code(label="Python source", language="python", value=EXAMPLE_VULN_CODE)
+        sast_btn = gr.Button("Scan for vulnerabilities", variant="primary")
+        sast_out = gr.Markdown()
+        sast_tbl = gr.Dataframe(headers=["severity", "OWASP", "CWE", "line", "message"],
+                                label="Findings", wrap=True)
+        sast_btn.click(scan_code, [sast_in], [sast_out, sast_tbl])
 
     gr.Markdown(
         "---\n*Deterministic core — no API key required. "

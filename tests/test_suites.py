@@ -11,6 +11,7 @@ from sentinel.bias import BiasProbe, lexicon_sentiment
 from sentinel.formatctl import FormatController
 from sentinel.models import demonstrator_scorer
 from sentinel.nim import NIMSafetyGuard, NIMClient
+from sentinel.appsec import AppSecScanner
 
 
 # ----------------------------- jailbreak --------------------------------- #
@@ -136,3 +137,52 @@ def test_nim_client_reports_unavailable_without_key():
     c = NIMClient(api_key=None)
     if not (c.api_key):  # only assert when the env truly has no key
         assert c.available is False
+
+
+# ------------------------------ appsec ----------------------------------- #
+
+def test_sast_flags_sql_injection():
+    s = AppSecScanner()
+    f = s.scan("cur.execute(f\"SELECT * FROM t WHERE x='{v}'\")")
+    assert any(x.category == "sql_injection" for x in f)
+
+
+def test_sast_parameterised_sql_is_clean():
+    s = AppSecScanner()
+    f = s.scan("cur.execute('SELECT * FROM t WHERE x=?', (v,))")
+    assert f == []
+
+
+def test_sast_flags_eval_and_pickle():
+    s = AppSecScanner()
+    assert any(x.category == "code_injection" for x in s.scan("eval(u)"))
+    assert any(x.category == "deserialization" for x in s.scan("import pickle\npickle.loads(b)"))
+
+
+def test_sast_flags_ssrf_dynamic_only():
+    s = AppSecScanner()
+    assert any(x.category == "ssrf" for x in s.scan("import requests\nrequests.get(u)"))
+    # literal URL is not flagged as SSRF
+    assert not any(x.category == "ssrf"
+                   for x in s.scan("import requests\nrequests.get('https://x.com')"))
+
+
+def test_sast_flags_hardcoded_secret_with_prefix():
+    s = AppSecScanner()
+    assert any(x.category == "secrets" for x in s.scan('DB_PASSWORD = "hunter2!!"'))
+
+
+def test_sast_verify_false_and_jwt_none():
+    s = AppSecScanner()
+    assert any(x.rule_id == "tls_verify_disabled"
+               for x in s.scan("requests.get('https://x', verify=False)"))
+    assert any(x.rule_id == "jwt_alg_none"
+               for x in s.scan("jwt.decode(t, k, algorithms=['none'])"))
+
+
+def test_sast_findings_carry_cwe_and_owasp():
+    s = AppSecScanner()
+    f = s.scan("import os\nos.system('ls ' + x)")[0]
+    assert f.cwe.startswith("CWE-")
+    assert "2021" in f.owasp
+    assert f.severity in {"low", "medium", "high", "critical"}

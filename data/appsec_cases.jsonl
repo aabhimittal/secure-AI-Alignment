@@ -1,0 +1,30 @@
+{"id": "sqli-v", "label": "vuln", "category": "sql_injection", "code": "cur.execute(f\"SELECT * FROM users WHERE name = '{name}'\")"}
+{"id": "sqli-s", "label": "safe", "category": "sql_injection", "code": "cur.execute(\"SELECT * FROM users WHERE name = ?\", (name,))"}
+{"id": "cmdi-v", "label": "vuln", "category": "command_injection", "code": "import os\nos.system(\"ping -c 1 \" + host)"}
+{"id": "cmdi-s", "label": "safe", "category": "command_injection", "code": "import subprocess\nsubprocess.run([\"ping\", \"-c\", \"1\", host], shell=False)"}
+{"id": "shell-v", "label": "vuln", "category": "command_injection", "code": "import subprocess\nsubprocess.run(cmd, shell=True)"}
+{"id": "code-v", "label": "vuln", "category": "code_injection", "code": "result = eval(user_expression)"}
+{"id": "code-s", "label": "safe", "category": "code_injection", "code": "import ast\nresult = ast.literal_eval(user_expression)"}
+{"id": "ssti-v", "label": "vuln", "category": "ssti", "code": "from flask import render_template_string\nrender_template_string(\"Hello \" + username)"}
+{"id": "ssti-s", "label": "safe", "category": "ssti", "code": "from flask import render_template\nrender_template(\"hello.html\", username=username)"}
+{"id": "ssrf-v", "label": "vuln", "category": "ssrf", "code": "import requests\nresp = requests.get(target_url)"}
+{"id": "ssrf-s", "label": "safe", "category": "ssrf", "code": "import requests\nresp = requests.get(\"https://api.example.com/status\")"}
+{"id": "deser-v", "label": "vuln", "category": "deserialization", "code": "import pickle\nobj = pickle.loads(blob)"}
+{"id": "deser-s", "label": "safe", "category": "deserialization", "code": "import json\nobj = json.loads(blob)"}
+{"id": "yaml-v", "label": "vuln", "category": "deserialization", "code": "import yaml\ncfg = yaml.load(text)"}
+{"id": "yaml-s", "label": "safe", "category": "deserialization", "code": "import yaml\ncfg = yaml.safe_load(text)"}
+{"id": "xxe-v", "label": "vuln", "category": "xxe", "code": "from lxml import etree\ndoc = etree.parse(untrusted_file)"}
+{"id": "xxe-s", "label": "safe", "category": "xxe", "code": "from defusedxml.ElementTree import parse\ndoc = parse(untrusted_file)"}
+{"id": "hash-v", "label": "vuln", "category": "weak_crypto", "code": "import hashlib\ndigest = hashlib.md5(password.encode()).hexdigest()"}
+{"id": "hash-s", "label": "safe", "category": "weak_crypto", "code": "import bcrypt\ndigest = bcrypt.hashpw(password.encode(), bcrypt.gensalt())"}
+{"id": "tls-v", "label": "vuln", "category": "insecure_transport", "code": "import requests\nrequests.get(\"https://api.example.com\", verify=False)"}
+{"id": "tls-s", "label": "safe", "category": "insecure_transport", "code": "import requests\nrequests.get(\"https://api.example.com\")"}
+{"id": "jwt-v", "label": "vuln", "category": "auth", "code": "import jwt\ndata = jwt.decode(token, verify=False)"}
+{"id": "jwt-none-v", "label": "vuln", "category": "auth", "code": "import jwt\ndata = jwt.decode(token, key, algorithms=[\"none\"])"}
+{"id": "jwt-s", "label": "safe", "category": "auth", "code": "import jwt\ndata = jwt.decode(token, key, algorithms=[\"HS256\"])"}
+{"id": "debug-v", "label": "vuln", "category": "misconfiguration", "code": "app.run(host=\"0.0.0.0\", debug=True)"}
+{"id": "debug-s", "label": "safe", "category": "misconfiguration", "code": "app.run(host=\"0.0.0.0\")"}
+{"id": "secret-v", "label": "vuln", "category": "secrets", "code": "DB_PASSWORD = \"S3cr3tP@ssw0rd!\""}
+{"id": "secret-s", "label": "safe", "category": "secrets", "code": "import os\nDB_PASSWORD = os.environ[\"DB_PASSWORD\"]"}
+{"id": "xss-v", "label": "vuln", "category": "xss", "code": "from markupsafe import Markup\nhtml = Markup(user_comment)"}
+{"id": "aws-v", "label": "vuln", "category": "secrets", "code": "aws_key = \"AKIAIOSFODNN7EXAMPLE\""}

@@ -12,6 +12,7 @@ Three production trust-and-safety guardrails, in one small, auditable package:
 | ⛔ **Adversarial / Jailbreak detection** | De-obfuscates and scans prompts before they reach the model | **F1 = 0.98** at **100 % precision** on AdvBench; obfuscation is defeated (**0.97** mean detection under base64 / leetspeak / zero-width / roleplay) |
 | ⚖️ **Bias mitigation** | Counterfactual demographic probing of any scorer/model | **0 false-bias flags** on an identity-blind scorer; **recovers injected bias** and correctly names *Muslim / Middle-Eastern / transgender* as the least-favoured groups |
 | 🧩 **Output-format control** | Extracts, repairs & schema-validates JSON / XML | Structured-output conformance lifted from **27 % → 93 %** on messy model output |
+| 🔎 **AppSec code scanning** | Strix-inspired OWASP Top-10 SAST for Python (AST-based) | **P 1.00 · R 1.00 · F1 1.00** on a labeled vuln/safe corpus (0 false positives); 13 vuln classes, CWE + fix per finding |
 
 > **Every number above is reproduced offline by `python scripts/run_eval.py`** — pure standard library, no API key, no model download. The results in [`results/`](results/) are committed so they can be diffed and audited.
 
@@ -95,6 +96,36 @@ The harness is validated two ways:
 15 realistic "messy" model outputs (markdown fences, chatty preambles, single quotes, trailing commas, Python `True/None`, unbalanced brackets, unescaped XML `&`). Only **27 %** parse naively; after Sentinel's extract-and-repair, **93 %** are handed to the backend as valid, schema-checked objects — **10 of 15 recovered**.
 
 ![Format conformance](results/charts/format_conformance.png)
+
+### 4 · AppSec code scanner (SAST) — [`results/appsec.json`](results/appsec.json)
+
+Inspired by [Strix](https://github.com/usestrix/strix) (an autonomous AI pentester), this is the **defensive, static** slice: an `ast`-based scanner that flags the same OWASP Top-10 classes Strix probes for — **injection** (SQL / OS-command / code / SSTI), **SSRF**, **XXE**, **insecure deserialization**, **XSS**, **weak crypto**, **disabled TLS verification**, **insecure JWT**, **security misconfig**, and **hardcoded secrets** — each with a CWE id, OWASP category, severity and remediation. AST matching keeps precision high: a *literal* SQL string is safe, an *interpolated* one is not.
+
+On a labeled corpus of 30 snippets (17 vulnerable + 13 safe fixed counterparts):
+
+```
+precision 1.00   recall 1.00   F1 1.00   (0 false positives on the safe set)
+```
+
+![AppSec OWASP findings](results/charts/appsec_owasp.png)
+
+It ships with a Strix-style CLI (`--target`, headless CI gate, git-diff scope):
+
+```bash
+python scripts/scan.py --target ./sentinel                     # scan a path
+python scripts/scan.py --target ./ --diff-base origin/main      # only changed files
+python scripts/scan.py --target ./ --min-severity high --ci     # exit 1 on findings (CI gate)
+python scripts/run_appsec.py                                    # reproduce the benchmark
+```
+
+```python
+from sentinel import AppSecScanner
+for f in AppSecScanner().scan("import os; os.system('ping ' + host)"):
+    print(f.severity, f.owasp, f.cwe, "->", f.message)
+# critical A03:2021-Injection CWE-78 -> os.system() with a dynamic command string is command injection
+```
+
+> Scope: this is a **detection** ("find & fix") tool — it never attacks live systems. It complements, rather than replaces, a full dynamic pentester like Strix.
 
 ---
 

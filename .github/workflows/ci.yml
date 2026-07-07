@@ -19,3 +19,7 @@ jobs:
         run: python -m pytest tests/ -q
       - name: Reproduce benchmarks
         run: python scripts/run_eval.py
+      - name: Reproduce SAST benchmark
+        run: python scripts/run_appsec.py
+      - name: Self-scan (report only)
+        run: python scripts/scan.py --target ./sentinel --min-severity critical --ci
